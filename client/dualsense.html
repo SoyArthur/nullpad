@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>NULLPAD · DualSense</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0f0f1a;
+    --surface: #1c1c2e;
+    --ctrl:    #252538;
+    --cross:   #5b9bd5;
+    --circle:  #e05a5a;
+    --square:  #e87bb0;
+    --tri:     #5abad5;
+    --trigger: #1a1a2e;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+    --topbar-h: clamp(36px, 5.5dvh, 50px);
+  }
+
+  body {
+    background: var(--bg);
+    min-height: 100dvh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+
+  /* ── Topbar: adaptive ──────────────────────────────────────────────────── */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: var(--topbar-h);
+    background: rgba(10,10,20,0.92); backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 clamp(10px, 3vw, 20px); z-index: 100; gap: 8px;
+  }
+  #topbar a {
+    color: #9ca3af;
+    font-size: clamp(11px, 2.8vw, 14px);
+    text-decoration: none; flex-shrink: 0;
+  }
+  .title {
+    color: var(--text);
+    font-size: clamp(12px, 3vw, 15px);
+    font-weight: 700;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    letter-spacing: .06em;
+    text-shadow: 0 0 8px rgba(88,80,236,.6);
+  }
+  #conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; flex-shrink: 0; }
+  #conn-dot.ok { background: #22c55e; }
+
+  /* ── Controller wrapper: no decorative shape ──────────────────────────── */
+  #ds-wrap {
+    margin-top: var(--topbar-h);
+    width: min(96vw, 460px);
+    background: transparent;
+    border-radius: 0;
+    padding: clamp(8px, 2dvh, 16px) clamp(8px, 2vw, 14px);
+    display: flex; flex-direction: column; gap: clamp(6px, 1.5dvh, 12px);
+  }
+
+  /* ── Trigger row ────────────────────────────────────────────────────────── */
+  .trigger-row {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 0 4px;
+  }
+  .trigger-group { display: flex; flex-direction: column; align-items: center; gap: 4px; width: clamp(60px, 16vw, 84px); }
+
+  .trigger-btn {
+    width: 100%; height: clamp(10px, 2dvh, 18px);
+    background: #111;
+    border-radius: 3px 3px 0 0;
+    border-top: 2px solid rgba(255,255,255,.10);
+    cursor: pointer;
+    transition: filter 0.08s, transform 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .trigger-btn.pressed { filter: brightness(2); transform: scaleY(0.93); }
+
+  /* bumpers */
+  .bumper-btn {
+    width: 100%; height: clamp(36px, 6dvh, 48px);
+    background: #2a2a40;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,.10);
+    cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+    color: var(--muted);
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: clamp(9px, 2vw, 12px); font-weight: 900; letter-spacing: .06em;
+    transition: filter 0.08s, transform 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bumper-btn.pressed { filter: brightness(1.8); transform: scale(0.93); }
+
+  /* ── Main section ──────────────────────────────────────────────────────── */
+  .main-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+
+  /* D-Pad */
+  .dpad {
+    width: clamp(72px, 20vw, 100px);
+    height: clamp(72px, 20vw, 100px);
+    display: grid; grid-template: repeat(3,1fr)/repeat(3,1fr); gap: 3px;
+  }
+  .dpad-btn {
+    background: #1a1a30;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,.08);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+    font-family: monospace;
+    font-size: clamp(7px, 1.8vw, 11px); font-weight: 900;
+    cursor: pointer;
+    transition: filter 0.08s, transform 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dpad-btn.center { border-radius: 50%; background: #222233; border: none; }
+  .dpad-btn.pressed { filter: brightness(2); transform: scale(0.93); }
+
+  /* Center cluster */
+  .center-cluster {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    flex: 1;
+  }
+  .sys-row { display: flex; gap: 8px; align-items: center; }
+
+  .sys-btn {
+    background: #1a1a30; border-radius: 50%;
+    color: var(--muted); font-size: clamp(9px, 2vw, 11px); font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: filter 0.08s, transform 0.08s;
+  }
+  .sys-btn.pressed { filter: brightness(2); transform: scale(0.93); }
+  .sys-btn.sm {
+    width: clamp(22px, 5.5vw, 30px); height: 14px; border-radius: 7px;
+    padding: 15px 8px; box-sizing: content-box;
+  }
+  .sys-btn.ps  {
+    width: clamp(26px, 7vw, 34px); height: clamp(26px, 7vw, 34px);
+    font-size: clamp(12px, 3vw, 16px);
+  }
+  .sys-btn.tp  {
+    width: clamp(52px, 13vw, 68px); height: clamp(22px, 4dvh, 30px);
+    border-radius: 6px; font-size: clamp(8px, 1.8vw, 10px);
+    font-family: 'SF Mono', 'Consolas', monospace; font-weight: 700; letter-spacing: .04em;
+  }
+
+  /* Face buttons */
+  .face-cluster {
+    width: clamp(72px, 20vw, 100px);
+    height: clamp(72px, 20vw, 100px);
+    position: relative;
+  }
+  .face-btn {
+    position: absolute;
+    width: clamp(26px, 7vw, 36px); height: clamp(26px, 7vw, 36px);
+    border-radius: 50%;
+    border: 2px solid rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: clamp(9px, 2vw, 12px); font-weight: 900;
+    color: rgba(0,0,0,0.55);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.4), 0 2px 0 rgba(0,0,0,.5);
+    transition: transform 0.08s, box-shadow 0.08s;
+  }
+
+  #btn-cross    { background: var(--cross);  bottom: 0; left: 50%; transform: translateX(-50%); }
+  #btn-circle   { background: var(--circle); right: 0; top: 50%; transform: translateY(-50%); }
+  #btn-square   { background: var(--square); left: 0;  top: 50%; transform: translateY(-50%); }
+  #btn-triangle { background: var(--tri);    top: 0;   left: 50%; transform: translateX(-50%); }
+
+  #btn-cross.pressed    { bottom: -2px; transform: translateX(-50%) translateY(2px); box-shadow: inset 0 -1px 0 rgba(0,0,0,.3), 0 1px 0 rgba(0,0,0,.3); }
+  #btn-circle.pressed   { right: -2px;  transform: translateY(-50%) translateX(2px);  box-shadow: inset 0 -1px 0 rgba(0,0,0,.3), 0 1px 0 rgba(0,0,0,.3); }
+  #btn-square.pressed   { left: -2px;   transform: translateY(-50%) translateX(-2px); box-shadow: inset 0 -1px 0 rgba(0,0,0,.3), 0 1px 0 rgba(0,0,0,.3); }
+  #btn-triangle.pressed { top: -2px;    transform: translateX(-50%) translateY(-2px); box-shadow: inset 0 -1px 0 rgba(0,0,0,.3), 0 1px 0 rgba(0,0,0,.3); }
+
+  /* Sticks */
+  .stick-row { display: flex; justify-content: space-around; padding: 0 10px; }
+  .stick-zone {
+    width: clamp(60px, 16vw, 76px); height: clamp(60px, 16vw, 76px);
+    background: #0d0d1a;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.12);
+    box-shadow: inset 0 0 0 4px rgba(0,0,0,.35), inset 0 0 0 8px rgba(255,255,255,.04);
+    position: relative;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .stick-zone::after {
+    content: attr(data-stick-label);
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: clamp(8px, 2vw, 11px); font-weight: 800; color: rgba(255,255,255,0.28);
+    pointer-events: none;
+    font-family: 'SF Mono', 'Consolas', monospace;
+  }
+  .stick-zone.click-active::after { color: rgba(255,255,255,0.9); }
+  .stick-knob {
+    position: absolute;
+    width: clamp(28px, 7.5vw, 38px); height: clamp(28px, 7.5vw, 38px);
+    background: radial-gradient(circle at 40% 35%, #3a3a50, #1a1a2a);
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.7);
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  #snack {
+    position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
+    background: rgba(20,20,30,0.95); color: #e2e8f0; font-size: 12px;
+    padding: 8px 16px; border-radius: 20px;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    white-space: nowrap; z-index: 150;
+  }
+  #snack.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <a href="/">← BACK</a>
+  <span class="title">NULLPAD · DS5</span>
+  <div id="conn-dot"></div>
+</div>
+
+<div id="snack"></div>
+
+<div id="ds-wrap">
+
+  <!-- Triggers row -->
+  <div class="trigger-row">
+    <div class="trigger-group">
+      <div class="trigger-btn" data-btn="l2" data-feedback-label="L2"></div>
+      <div class="bumper-btn"  data-btn="l1" data-feedback-label="L1">L1</div>
+    </div>
+    <div class="trigger-group" style="align-items:flex-end">
+      <div class="trigger-btn" data-btn="r2" data-feedback-label="R2"></div>
+      <div class="bumper-btn"  data-btn="r1" data-feedback-label="R1">R1</div>
+    </div>
+  </div>
+
+  <!-- Main row: DPad | Center | Face -->
+  <div class="main-row">
+
+    <!-- D-Pad -->
+    <div class="dpad">
+      <div></div>
+      <div class="dpad-btn" data-btn="dpadUp"    data-feedback-label="↑">▲</div>
+      <div></div>
+      <div class="dpad-btn" data-btn="dpadLeft"  data-feedback-label="←">◀</div>
+      <div class="dpad-btn center"></div>
+      <div class="dpad-btn" data-btn="dpadRight" data-feedback-label="→">▶</div>
+      <div></div>
+      <div class="dpad-btn" data-btn="dpadDown"  data-feedback-label="↓">▼</div>
+      <div></div>
+    </div>
+
+    <!-- Center cluster -->
+    <div class="center-cluster">
+      <div class="sys-row">
+        <div class="sys-btn sm" data-btn="create"  data-feedback-label="CREATE">✦</div>
+        <div class="sys-btn ps" data-btn="ps"       data-feedback-label="PS">PS</div>
+        <div class="sys-btn sm" data-btn="options" data-feedback-label="OPTIONS">≡</div>
+      </div>
+      <div class="sys-btn tp" data-btn="touchpad" data-feedback-label="TOUCHPAD">TPAD</div>
+    </div>
+
+    <!-- Face buttons -->
+    <div class="face-cluster">
+      <div class="face-btn" id="btn-triangle" data-btn="triangle" data-feedback-label="△">▲</div>
+      <div class="face-btn" id="btn-square"   data-btn="square"   data-feedback-label="□">■</div>
+      <div class="face-btn" id="btn-circle"   data-btn="circle"   data-feedback-label="○">○</div>
+      <div class="face-btn" id="btn-cross"    data-btn="cross"    data-feedback-label="✕">✕</div>
+    </div>
+
+  </div>
+
+  <!-- Analog sticks -->
+  <div class="stick-row">
+    <div class="stick-zone" id="stick-left"  data-stick-click="l3" data-stick-label="L3">
+      <div class="stick-knob" id="knob-left"></div>
+    </div>
+    <div class="stick-zone" id="stick-right" data-stick-click="r3" data-stick-label="R3">
+      <div class="stick-knob" id="knob-right"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="/ws.js"></script>
+<script src="/input.js"></script>
+<script src="/layout.js"></script>
+<script>
+const btnState = {
+  cross: false, circle: false, square: false, triangle: false,
+  l1: false, r1: false, l2: 0, r2: 0,
+  options: false, create: false, ps: false, touchpad: false,
+  l3: false, r3: false,
+  dpadUp: false, dpadDown: false, dpadLeft: false, dpadRight: false,
+  lx: 0, ly: 0, rx: 0, ry: 0,
+};
+let sendScheduled = false;
+
+NullWS.init(
+  (msg) => showSnack(`Slot ${msg.slot} · DualSense`),
+  (pattern) => { if (navigator.vibrate) navigator.vibrate(pattern); },
+  (status) => {
+    document.getElementById('conn-dot').className = status === 'connected' ? 'ok' : '';
+  },
+  'dualSense'
+);
+
+NullInput.bindButtons(btnState, scheduleSend, { analogKeys: ['l2', 'r2'] });
+
+function setupStick(zoneId, knobId, xKey, yKey, clickKey) {
+  NullInput.bindStick(
+    document.getElementById(zoneId),
+    document.getElementById(knobId),
+    btnState, xKey, yKey, scheduleSend, { clickKey }
+  );
+}
+setupStick('stick-left',  'knob-left',  'lx', 'ly', 'l3');
+setupStick('stick-right', 'knob-right', 'rx', 'ry', 'r3');
+
+function scheduleSend() {
+  if (sendScheduled) return;
+  sendScheduled = true;
+  requestAnimationFrame(() => {
+    sendScheduled = false;
+    NullWS.send({ type: 'input', state: { ...btnState } });
+  });
+}
+
+let snackTimer;
+function showSnack(msg) {
+  const el = document.getElementById('snack');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(snackTimer);
+  snackTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>

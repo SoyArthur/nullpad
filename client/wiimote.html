@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>NULLPAD · Wiimote</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f0eeea;
+    --surface:   #e8e5e0;
+    --btn:       #d4d0ca;
+    --btn-dark:  #2a2a2a;
+    --btn-red:   #cc2200;
+    --btn-blue:  #1a5fa8;
+    --accent:    #7c3aed;
+    --text-dark: #1a1a1a;
+    --text-muted:#6b6b6b;
+    --shadow:    rgba(0,0,0,0.18);
+    --radius-sm: 8px;
+    --radius-md: 20px;
+    --radius-lg: 36px;
+  }
+
+  body {
+    background: #1a1a1a;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-height: 100dvh;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 44px;
+    background: rgba(10,10,15,0.92); backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; z-index: 100;
+  }
+  #topbar a { color: #9ca3af; font-size: 13px; text-decoration: none; }
+  #topbar .title { color: #e2e8f0; font-size: 14px; font-weight: 600; }
+  #conn-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #ef4444; transition: background 0.3s;
+  }
+  #conn-dot.ok { background: #22c55e; }
+
+  #layout-wrap {
+    display: flex; align-items: center; justify-content: center;
+    padding-top: 52px; width: 100%;
+  }
+
+  #wiimote {
+    position: relative; width: 120px;
+    background: var(--bg);
+    border-radius: var(--radius-lg) var(--radius-lg) 28px 28px;
+    box-shadow: 0 8px 32px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.6);
+    padding: 18px 14px 24px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  body.horizontal #wiimote { transform: rotate(-90deg); margin: 40px 0; }
+
+  .speaker {
+    width: 56px; height: 8px;
+    background: repeating-linear-gradient(
+      90deg, var(--btn) 0px, var(--btn) 3px, transparent 3px, transparent 6px
+    );
+    border-radius: 4px; opacity: 0.6;
+  }
+
+  .power-row { display: flex; gap: 5px; align-items: center; }
+  .led {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--btn); border: 1px solid rgba(0,0,0,0.15);
+  }
+  .led.active { background: #22c55e; box-shadow: 0 0 4px #22c55e; }
+
+  .dpad {
+    width: 78px; height: 78px; position: relative;
+    display: grid; grid-template: repeat(3,1fr)/repeat(3,1fr); gap: 2px;
+  }
+  .dpad-btn {
+    background: var(--btn-dark); border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: #aaa; font-size: 11px; cursor: pointer;
+    transition: filter 0.08s, transform 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dpad-btn.center { border-radius: 50%; background: #3a3a3a; }
+  .dpad-btn.pressed { filter: brightness(1.6); transform: scale(0.93); }
+
+  .sys-row { display: flex; gap: 8px; align-items: center; }
+  .sys-btn {
+    background: var(--btn-dark); border-radius: 50%;
+    color: #bbb; font-size: 9px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: filter 0.08s, transform 0.08s;
+  }
+  .sys-btn.pressed { filter: brightness(1.8); transform: scale(0.93); }
+  /* sm: extend touch target */
+  .sys-btn.small {
+    width: 22px; height: 10px; border-radius: 5px;
+    padding: 17px 8px; box-sizing: content-box;
+  }
+  .sys-btn.home { width: 26px; height: 26px; font-size: 13px; }
+
+  .a-btn {
+    width: 44px; height: 44px;
+    background: var(--btn-blue); border-radius: 50%;
+    border: 3px solid #144d8a; box-shadow: 0 4px 0 #0d3360;
+    color: #fff; font-size: 16px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .a-btn.pressed { transform: translateY(3px) scale(0.93); box-shadow: 0 1px 0 #0d3360; }
+
+  .b-btn {
+    width: 80px; height: 24px; background: var(--btn-dark); border-radius: 12px;
+    color: #bbb; font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 3px 0 #111;
+    transition: transform 0.08s, box-shadow 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .b-btn.pressed { transform: translateY(2px) scale(0.93); box-shadow: 0 1px 0 #111; }
+
+  .small-row { display: flex; gap: 10px; }
+  .num-btn {
+    width: 32px; height: 32px; background: var(--btn-dark); border-radius: 50%;
+    color: #bbb; font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 3px 0 #111;
+    transition: transform 0.08s, box-shadow 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .num-btn.pressed { transform: translateY(2px) scale(0.93); box-shadow: 0 1px 0 #111; }
+
+  #ir-overlay {
+    position: fixed; bottom: 64px; right: 16px;
+    width: 72px; height: 72px;
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;
+    background: rgba(0,0,0,0.4); overflow: hidden; display: none;
+  }
+  #ir-overlay.visible { display: block; }
+  #ir-cross-h, #ir-cross-v { position: absolute; background: rgba(124,58,237,0.7); }
+  #ir-cross-h { height: 1px; width: 100%; top: 50%; left: 0; }
+  #ir-cross-v { width: 1px; height: 100%; left: 50%; top: 0; }
+  #ir-dot {
+    position: absolute; width: 8px; height: 8px; border-radius: 50%;
+    background: #a855f7; transform: translate(-50%,-50%);
+    top: 50%; left: 50%; transition: top 0.05s linear, left 0.05s linear;
+  }
+
+  #rotate-btn {
+    position: fixed; bottom: 64px; left: 16px;
+    width: 44px; height: 44px;
+    background: rgba(30,30,46,0.9); border: 1px solid #2d2d3f;
+    border-radius: 12px; color: #9ca3af; font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    z-index: 150;
+  }
+
+  #snack {
+    position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%);
+    background: rgba(20,20,30,0.95); color: #e2e8f0; font-size: 12px;
+    padding: 8px 16px; border-radius: 20px;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s; white-space: nowrap;
+    z-index: 151;
+  }
+  #snack.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <a href="/">← Back</a>
+  <span class="title">Wiimote</span>
+  <div id="conn-dot"></div>
+</div>
+
+<div id="ir-overlay">
+  <div id="ir-cross-h"></div>
+  <div id="ir-cross-v"></div>
+  <div id="ir-dot"></div>
+</div>
+
+<div id="rotate-btn" onclick="toggleRotate()">⟳</div>
+<div id="snack"></div>
+
+<div id="layout-wrap">
+  <div id="wiimote">
+
+    <div class="speaker"></div>
+
+    <div class="power-row">
+      <div class="led active" id="led1"></div>
+      <div class="led" id="led2"></div>
+      <div class="led" id="led3"></div>
+      <div class="led" id="led4"></div>
+    </div>
+
+    <div class="dpad" id="dpad">
+      <div></div>
+      <div class="dpad-btn" data-btn="dpadUp"    data-feedback-label="↑">▲</div>
+      <div></div>
+      <div class="dpad-btn" data-btn="dpadLeft"  data-feedback-label="←">◀</div>
+      <div class="dpad-btn center"></div>
+      <div class="dpad-btn" data-btn="dpadRight" data-feedback-label="→">▶</div>
+      <div></div>
+      <div class="dpad-btn" data-btn="dpadDown"  data-feedback-label="↓">▼</div>
+      <div></div>
+    </div>
+
+    <div class="sys-row">
+      <div class="sys-btn small" data-btn="minus" data-feedback-label="−">−</div>
+      <div class="sys-btn home"  data-btn="home"  data-feedback-label="HOME">⊙</div>
+      <div class="sys-btn small" data-btn="plus"  data-feedback-label="+">+</div>
+    </div>
+
+    <div class="a-btn" data-btn="a" data-feedback-label="A">A</div>
+
+    <div class="small-row">
+      <div class="num-btn" data-btn="two" data-feedback-label="2">2</div>
+      <div class="num-btn" data-btn="one" data-feedback-label="1">1</div>
+    </div>
+
+    <div class="b-btn" data-btn="b" data-feedback-label="B">B</div>
+
+  </div>
+</div>
+
+<script src="/ws.js"></script>
+<script src="/input.js"></script>
+<script src="/layout.js"></script>
+<script src="/sensors.js"></script>
+<script>
+const btnState = {
+  a: false, b: false, one: false, two: false,
+  dpadUp: false, dpadDown: false, dpadLeft: false, dpadRight: false,
+  minus: false, plus: false, home: false,
+};
+let horizontal = false;
+let sendScheduled = false;
+
+NullWS.init(
+  (msg) => { showSnack(`Slot ${msg.slot} · Wiimote`); scheduleSend(); },
+  (pattern) => { if (navigator.vibrate) navigator.vibrate(pattern); },
+  (status) => {
+    const dot = document.getElementById('conn-dot');
+    dot.className = status === 'connected' ? 'ok' : '';
+    if (status === 'disconnected') showSnack('Reconnecting…');
+  },
+  'wiimote'
+);
+
+NullSensors.init(() => scheduleSend()).catch((e) => console.warn('[Wiimote] Sensor init:', e));
+document.getElementById('ir-overlay').classList.add('visible');
+
+NullInput.bindButtons(btnState, scheduleSend);
+
+function scheduleSend() {
+  if (sendScheduled) return;
+  sendScheduled = true;
+  requestAnimationFrame(() => {
+    sendScheduled = false;
+    const sensors = NullSensors.getState();
+    NullSensors.clearShake();
+    updateIROverlay(sensors.irX, sensors.irY);
+    NullWS.send({
+      type: 'input',
+      state: {
+        ...btnState,
+        irX:           sensors.irX,
+        irY:           sensors.irY,
+        shakeDetected: sensors.shakeDetected,
+        motion:        sensors.motion,
+      }
+    });
+  });
+}
+
+function updateIROverlay(x, y) {
+  const dot = document.getElementById('ir-dot');
+  dot.style.left = ((x + 1) / 2 * 100) + '%';
+  dot.style.top  = ((y + 1) / 2 * 100) + '%';
+}
+
+function toggleRotate() {
+  horizontal = !horizontal;
+  document.body.classList.toggle('horizontal', horizontal);
+  try {
+    if (horizontal) screen.orientation.lock('landscape').catch(() => {});
+    else            screen.orientation.unlock();
+  } catch (_) {}
+}
+
+let snackTimer;
+function showSnack(msg) {
+  const el = document.getElementById('snack');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(snackTimer);
+  snackTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+document.body.addEventListener('touchstart', async () => {
+  if (!NullSensors.isGranted()) await NullSensors.init(() => scheduleSend()).catch((e) => console.warn('[Wiimote] Sensor init:', e));
+}, { once: true });
+</script>
+</body>
+</html>

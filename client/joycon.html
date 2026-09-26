@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>NULLPAD · Joy-Con</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:     #0a0a0f;
+    --jcr:    #e83232;
+    --jcl:    #2264c8;
+    --btn:    #1a1a1a;
+    --text:   #e2e8f0;
+    --muted:  #64748b;
+  }
+
+  body {
+    background: var(--bg); min-height: 100dvh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-start;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+    padding-bottom: 24px;
+  }
+
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 44px;
+    background: rgba(5,5,10,0.95); backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; z-index: 100;
+  }
+  #topbar a { color: #9ca3af; font-size: 13px; text-decoration: none; }
+  .title { color: var(--text); font-size: 14px; font-weight: 600; }
+  #conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }
+  #conn-dot.ok { background: #22c55e; }
+
+  /* Mode tabs */
+  #mode-bar {
+    margin-top: 52px;
+    display: flex; gap: 0; border-radius: 10px; overflow: hidden;
+    border: 1px solid #1e1e2e; width: min(96vw, 360px);
+  }
+  .mode-tab {
+    flex: 1; padding: 10px 4px; text-align: center;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.05em;
+    cursor: pointer; background: #12121a; color: var(--muted);
+    transition: background 0.15s, color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mode-tab.active { background: #1e1e2e; color: var(--text); }
+  #mode-tab-right.active { border-bottom: 2px solid var(--jcr); }
+  #mode-tab-left.active  { border-bottom: 2px solid var(--jcl); }
+  #mode-tab-pair.active  { border-bottom: 2px solid #a855f7; }
+
+  /* Layout panels */
+  .layout { display: none; flex-direction: column; align-items: center; gap: 12px; margin-top: 16px; width: min(96vw, 360px); }
+  .layout.active { display: flex; }
+
+  /* Joy-Con body */
+  .jc-body {
+    border-radius: 18px;
+    padding: 16px 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    width: 100%;
+  }
+  .jc-body.right { background: var(--jcr); }
+  .jc-body.left  { background: var(--jcl); }
+  .jc-body.pair  { background: linear-gradient(90deg, var(--jcl) 50%, var(--jcr) 50%); border-radius: 18px; }
+
+  /* Generic button */
+  .jc-btn {
+    background: rgba(0,0,0,0.35); border-radius: 50%;
+    color: rgba(255,255,255,0.85); font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.3);
+    transition: transform 0.08s, box-shadow 0.08s, filter 0.08s;
+  }
+  .jc-btn.pressed { transform: translateY(2px) scale(0.95); box-shadow: 0 1px 0 rgba(0,0,0,0.3); filter: brightness(1.5); }
+  .jc-btn.sm { width: 32px; height: 32px; }
+  .jc-btn.lg { width: 42px; height: 42px; font-size: 14px; }
+  .jc-btn.pill { width: 52px; height: 18px; border-radius: 9px; font-size: 10px; }
+  .jc-btn.rail { width: 100%; height: 44px; border-radius: 8px; }
+
+  .btn-row { display: flex; gap: 8px; justify-content: center; align-items: center; }
+  .btn-grid {
+    display: grid; grid-template: repeat(3,1fr)/repeat(3,1fr); gap: 4px;
+    width: 104px; height: 104px;
+  }
+  .btn-grid .jc-btn { width: auto; height: auto; }
+
+  /* Stick */
+  .stick-zone {
+    width: 72px; height: 72px; background: rgba(0,0,0,0.4);
+    border-radius: 50%; position: relative; cursor: pointer; touch-action: none;
+  }
+  .stick-knob {
+    position: absolute; width: 36px; height: 36px;
+    background: radial-gradient(circle at 40% 35%, rgba(255,255,255,0.2), rgba(0,0,0,0.3));
+    border-radius: 50%; top: 50%; left: 50%;
+    transform: translate(-50%,-50%); pointer-events: none;
+  }
+
+  /* Pair layout side-by-side */
+  .pair-row {
+    display: flex; gap: 8px; width: 100%;
+  }
+  .pair-half { flex: 1; }
+
+  #snack {
+    position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
+    background: rgba(10,10,20,0.95); color: #e2e8f0; font-size: 12px;
+    padding: 8px 16px; border-radius: 20px;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s; white-space: nowrap;
+    z-index: 150;
+  }
+  #snack.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <a href="/">← Back</a>
+  <span class="title">Joy-Con</span>
+  <div id="conn-dot"></div>
+</div>
+<div id="snack"></div>
+
+<!-- Mode tabs -->
+<div id="mode-bar">
+  <div class="mode-tab active" id="mode-tab-right" onclick="setMode('right')">RIGHT ◀</div>
+  <div class="mode-tab"        id="mode-tab-left"  onclick="setMode('left')">▶ LEFT</div>
+  <div class="mode-tab"        id="mode-tab-pair"  onclick="setMode('pair')">PAIR</div>
+</div>
+
+<!-- Right Joy-Con layout -->
+<div class="layout active" id="layout-right">
+  <div class="jc-body right">
+    <div class="jc-btn rail" data-btn="r"  data-feedback-label="R">R</div>
+    <div class="jc-btn rail" data-btn="zr" data-feedback-label="ZR" style="background:rgba(0,0,0,0.5)">ZR</div>
+    <div class="btn-row">
+      <div class="jc-btn pill" data-btn="sr" data-feedback-label="SR">SR</div>
+      <div class="jc-btn pill" data-btn="sl" data-feedback-label="SL">SL</div>
+    </div>
+    <div style="position:relative; width:104px; height:104px;">
+      <div class="jc-btn" style="width:38px;height:38px;position:absolute;top:0;left:50%;transform:translateX(-50%)"    data-btn="x" data-feedback-label="X">X</div>
+      <div class="jc-btn" style="width:38px;height:38px;position:absolute;left:0;top:50%;transform:translateY(-50%)"    data-btn="y" data-feedback-label="Y">Y</div>
+      <div class="jc-btn" style="width:38px;height:38px;position:absolute;right:0;top:50%;transform:translateY(-50%)"   data-btn="a" data-feedback-label="A">A</div>
+      <div class="jc-btn" style="width:38px;height:38px;position:absolute;bottom:0;left:50%;transform:translateX(-50%)" data-btn="b" data-feedback-label="B">B</div>
+    </div>
+    <div class="stick-zone" id="stick-r" data-stick-click="rStick" data-stick-label="R3"><div class="stick-knob" id="knob-r"></div></div>
+    <div class="btn-row">
+      <div class="jc-btn sm" data-btn="plus" data-feedback-label="+">+</div>
+      <div class="jc-btn sm" data-btn="home" data-feedback-label="HOME">⊙</div>
+    </div>
+  </div>
+</div>
+
+<!-- Left Joy-Con layout -->
+<div class="layout" id="layout-left">
+  <div class="jc-body left">
+    <div class="jc-btn rail" data-btn="zl" data-feedback-label="ZL" style="background:rgba(0,0,0,0.5)">ZL</div>
+    <div class="jc-btn rail" data-btn="l"  data-feedback-label="L">L</div>
+    <div class="btn-row">
+      <div class="jc-btn pill" data-btn="sl-l" data-feedback-label="SL">SL</div>
+      <div class="jc-btn pill" data-btn="sr-l" data-feedback-label="SR">SR</div>
+    </div>
+    <div style="position:relative;width:104px;height:104px;">
+      <div class="jc-btn" style="width:38px;height:38px;position:absolute;top:0;left:50%;transform:translateX(-50%)"    data-btn="up"    data-feedback-label="↑">▲</div>
+      <div class="jc-btn" style="width:38px;height:38px;position:absolute;left:0;top:50%;transform:translateY(-50%)"    data-btn="left"  data-feedback-label="←">◀</div>
+      <div class="jc-btn" style="width:38px;height:38px;position:absolute;right:0;top:50%;transform:translateY(-50%)"   data-btn="right" data-feedback-label="→">▶</div>
+      <div class="jc-btn" style="width:38px;height:38px;position:absolute;bottom:0;left:50%;transform:translateX(-50%)" data-btn="down"  data-feedback-label="↓">▼</div>
+    </div>
+    <div class="stick-zone" id="stick-l" data-stick-click="lStick" data-stick-label="L3"><div class="stick-knob" id="knob-l"></div></div>
+    <div class="btn-row">
+      <div class="jc-btn sm" data-btn="minus"   data-feedback-label="−">−</div>
+      <div class="jc-btn sm" data-btn="capture" data-feedback-label="CAP">⊡</div>
+    </div>
+  </div>
+</div>
+
+<!-- Pair layout -->
+<div class="layout" id="layout-pair">
+  <div class="pair-row">
+    <div class="pair-half">
+      <div class="jc-body left" style="gap:6px">
+        <div class="jc-btn rail" data-btn="zl-p" data-feedback-label="ZL" style="background:rgba(0,0,0,0.5)">ZL</div>
+        <div class="jc-btn rail" data-btn="l-p"  data-feedback-label="L">L</div>
+        <div style="position:relative;width:90px;height:90px;">
+          <div class="jc-btn" style="width:30px;height:30px;position:absolute;top:0;left:50%;transform:translateX(-50%)"    data-btn="up-p"    data-feedback-label="↑">▲</div>
+          <div class="jc-btn" style="width:30px;height:30px;position:absolute;left:0;top:50%;transform:translateY(-50%)"    data-btn="left-p"  data-feedback-label="←">◀</div>
+          <div class="jc-btn" style="width:30px;height:30px;position:absolute;right:0;top:50%;transform:translateY(-50%)"   data-btn="right-p" data-feedback-label="→">▶</div>
+          <div class="jc-btn" style="width:30px;height:30px;position:absolute;bottom:0;left:50%;transform:translateX(-50%)" data-btn="down-p"  data-feedback-label="↓">▼</div>
+        </div>
+        <div class="stick-zone" style="width:60px;height:60px" id="stick-lp" data-stick-click="lStick" data-stick-label="L3"><div class="stick-knob" id="knob-lp"></div></div>
+        <div class="btn-row">
+          <div class="jc-btn" style="width:24px;height:24px;font-size:10px" data-btn="minus-p" data-feedback-label="−">−</div>
+        </div>
+      </div>
+    </div>
+    <div class="pair-half">
+      <div class="jc-body right" style="gap:6px">
+        <div class="jc-btn rail" data-btn="r-p"  data-feedback-label="R">R</div>
+        <div class="jc-btn rail" data-btn="zr-p" data-feedback-label="ZR" style="background:rgba(0,0,0,0.5)">ZR</div>
+        <div style="position:relative;width:90px;height:90px;">
+          <div class="jc-btn" style="width:30px;height:30px;position:absolute;top:0;left:50%;transform:translateX(-50%)"    data-btn="x-p" data-feedback-label="X">X</div>
+          <div class="jc-btn" style="width:30px;height:30px;position:absolute;left:0;top:50%;transform:translateY(-50%)"    data-btn="y-p" data-feedback-label="Y">Y</div>
+          <div class="jc-btn" style="width:30px;height:30px;position:absolute;right:0;top:50%;transform:translateY(-50%)"   data-btn="a-p" data-feedback-label="A">A</div>
+          <div class="jc-btn" style="width:30px;height:30px;position:absolute;bottom:0;left:50%;transform:translateX(-50%)" data-btn="b-p" data-feedback-label="B">B</div>
+        </div>
+        <div class="stick-zone" style="width:60px;height:60px" id="stick-rp" data-stick-click="rStick" data-stick-label="R3"><div class="stick-knob" id="knob-rp"></div></div>
+        <div class="btn-row">
+          <div class="jc-btn" style="width:24px;height:24px;font-size:10px" data-btn="plus-p" data-feedback-label="+">+</div>
+          <div class="jc-btn" style="width:24px;height:24px;font-size:10px" data-btn="home-p" data-feedback-label="HOME">⊙</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/ws.js"></script>
+<script src="/input.js"></script>
+<script src="/layout.js"></script>
+<script>
+let currentMode = 'right';
+let sendScheduled = false;
+
+const S = {
+  mode: 'right',
+  a:false,b:false,x:false,y:false,
+  r:false,zr:false,sr:false,sl:false,plus:false,home:false,rStick:false,
+  rx:0,ry:0,
+  up:false,down:false,left:false,right:false,
+  l:false,zl:false,minus:false,capture:false,lStick:false,
+  lx:0,ly:0,
+};
+
+NullWS.init(
+  (m)=>showSnack(`Slot ${m.slot} · ${m.profile === 'joycon' ? 'Joy-Con' : m.profile}`),
+  (p)=>{ if(navigator.vibrate) navigator.vibrate(p); },
+  (s)=>{ document.getElementById('conn-dot').className = s==='connected'?'ok':''; },
+  'joycon'
+);
+
+const BUTTON_KEY_MAP = Object.freeze({
+  'sl-l': 'sl', 'sr-l': 'sr',
+  'zl-p': 'zl', 'l-p': 'l',
+  'up-p': 'up', 'down-p': 'down', 'left-p': 'left', 'right-p': 'right',
+  'minus-p': 'minus',
+  'r-p': 'r', 'zr-p': 'zr',
+  'x-p': 'x', 'y-p': 'y', 'a-p': 'a', 'b-p': 'b',
+  'plus-p': 'plus', 'home-p': 'home',
+});
+
+function bindMappedButtons() {
+  document.querySelectorAll('[data-btn]').forEach((el) => {
+    const raw = el.dataset.btn;
+    el.dataset.btn = BUTTON_KEY_MAP[raw] || raw;
+  });
+  NullInput.bindButtons(S, scheduleSend);
+}
+bindMappedButtons();
+
+function setupStick(zoneId, knobId, xKey, yKey, clickKey) {
+  NullInput.bindStick(
+    document.getElementById(zoneId),
+    document.getElementById(knobId),
+    S, xKey, yKey, scheduleSend, { clickKey }
+  );
+}
+setupStick('stick-r','knob-r','rx','ry','rStick');
+setupStick('stick-l','knob-l','lx','ly','lStick');
+setupStick('stick-lp','knob-lp','lx','ly','lStick');
+setupStick('stick-rp','knob-rp','rx','ry','rStick');
+
+function resetTransientState() {
+  for (const key of Object.keys(S)) {
+    if (key === 'mode') continue;
+    S[key] = typeof S[key] === 'boolean' ? false : 0;
+  }
+  document.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
+  scheduleSend();
+}
+
+function setMode(m){
+  if (!['right', 'left', 'pair'].includes(m)) return;
+  resetTransientState();
+  currentMode=m; S.mode=m;
+  document.querySelectorAll('.layout').forEach(el=>el.classList.remove('active'));
+  document.getElementById('layout-'+m).classList.add('active');
+  document.querySelectorAll('.mode-tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('mode-tab-'+m).classList.add('active');
+  NullWS.send({ type:'init', profile:'joycon' });
+}
+
+function scheduleSend(){
+  if(sendScheduled) return;
+  sendScheduled=true;
+  requestAnimationFrame(()=>{ sendScheduled=false; NullWS.send({ type:'input', state:{...S} }); });
+}
+
+let snackTimer;
+function showSnack(msg){
+  const el=document.getElementById('snack');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(snackTimer); snackTimer=setTimeout(()=>el.classList.remove('show'),2500);
+}
+</script>
+</body>
+</html>

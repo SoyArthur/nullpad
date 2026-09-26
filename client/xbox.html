@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>NULLPAD · Xbox</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0a0f0a;
+    --ctrl:    #1a1f1a;
+    --surface: #222822;
+    --btn-a:   #4caf50;
+    --btn-b:   #e53935;
+    --btn-x:   #1e88e5;
+    --btn-y:   #fdd835;
+    --guide:   #107c10;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+    /* Adaptive topbar height token */
+    --topbar-h: clamp(36px, 5.5dvh, 50px);
+  }
+
+  body {
+    background: var(--bg);
+    min-height: 100dvh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+
+  /* ── Topbar: adaptive, not fixed 44px ─────────────────────────────────── */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: var(--topbar-h);
+    background: rgba(5,10,5,0.95); backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 clamp(10px, 3vw, 20px); z-index: 100;
+    gap: 8px;
+  }
+  #topbar a {
+    color: #9ca3af;
+    font-size: clamp(11px, 2.8vw, 14px);
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+  .title {
+    color: var(--text);
+    font-size: clamp(12px, 3vw, 15px);
+    font-weight: 700;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    letter-spacing: .06em;
+    text-shadow: 0 0 8px rgba(16,124,16,.5);
+  }
+  #conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; flex-shrink: 0; }
+  #conn-dot.ok { background: #22c55e; }
+
+  /* ── Controller wrapper: no decorative shape ──────────────────────────── */
+  #xbox-wrap {
+    margin-top: var(--topbar-h);
+    width: min(96vw, 460px);
+    /* No background shell — clean HUD canvas */
+    background: transparent;
+    border-radius: 0;
+    padding: clamp(8px, 2dvh, 16px) clamp(8px, 2vw, 14px);
+    display: flex; flex-direction: column; gap: clamp(6px, 1.5dvh, 12px);
+  }
+
+  /* ── Triggers ──────────────────────────────────────────────────────────── */
+  .trigger-row { display: flex; justify-content: space-between; padding: 0 2px; }
+  .trig-stack { display: flex; flex-direction: column; gap: 3px; width: clamp(64px, 18vw, 92px); }
+  .trig-btn {
+    width: 100%; height: clamp(10px, 2dvh, 18px);
+    background: #111;
+    border-radius: 3px 3px 0 0;
+    border-top: 2px solid rgba(255,255,255,.10);
+    cursor: pointer;
+    transition: filter 0.08s, transform 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .trig-btn.pressed { filter: brightness(2.5); transform: scaleY(0.93); }
+
+  /* bumpers */
+  .bump-btn {
+    width: 100%; height: clamp(36px, 6dvh, 48px);
+    background: var(--surface);
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,.10);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: clamp(9px, 2vw, 12px); font-weight: 900;
+    letter-spacing: .06em;
+    transition: filter 0.08s, transform 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bump-btn.pressed { filter: brightness(1.8); transform: scale(0.93); }
+
+  /* ── Main row ──────────────────────────────────────────────────────────── */
+  .main-row {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .dpad {
+    width: clamp(72px, 20vw, 100px);
+    height: clamp(72px, 20vw, 100px);
+    display: grid; grid-template: repeat(3,1fr)/repeat(3,1fr); gap: 3px;
+  }
+  .dp {
+    background: #111;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,.08);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+    font-family: monospace;
+    font-size: clamp(7px, 1.8vw, 11px); font-weight: 900;
+    cursor: pointer;
+    transition: filter 0.08s, transform 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dp.center { border-radius: 50%; background: #181818; border: none; }
+  .dp.pressed { filter: brightness(2); transform: scale(0.93); }
+
+  .center-col {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .menu-row { display: flex; gap: 6px; }
+  .menu-btn {
+    background: #111; border-radius: 50%;
+    color: var(--muted); font-size: clamp(9px, 2vw, 11px); font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: filter 0.08s, transform 0.08s;
+  }
+  .menu-btn.pressed { filter: brightness(2); transform: scale(0.93); }
+  .menu-btn.sm {
+    width: clamp(24px, 6vw, 32px); height: 14px; border-radius: 7px;
+    padding: 15px 8px; box-sizing: content-box;
+  }
+  .menu-btn.guide {
+    width: clamp(32px, 8vw, 42px); height: clamp(32px, 8vw, 42px);
+    background: var(--guide);
+    font-size: clamp(13px, 3.5vw, 18px); color: #fff;
+    box-shadow: 0 0 10px rgba(16,124,16,0.5);
+    border-radius: 50%;
+  }
+
+  /* ── Face buttons ──────────────────────────────────────────────────────── */
+  .face-cluster {
+    width: clamp(72px, 20vw, 100px);
+    height: clamp(72px, 20vw, 100px);
+    position: relative;
+  }
+  .face-btn {
+    position: absolute;
+    width: clamp(26px, 7vw, 36px); height: clamp(26px, 7vw, 36px);
+    border-radius: 50%;
+    border: 2px solid rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: clamp(9px, 2vw, 12px); font-weight: 900;
+    color: rgba(0,0,0,0.6);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.4), 0 2px 0 rgba(0,0,0,.5);
+    transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .face-btn.pressed { transform: translateY(2px); box-shadow: inset 0 -1px 0 rgba(0,0,0,.4), 0 1px 0 rgba(0,0,0,.3); }
+
+  #fa { background: var(--btn-a); bottom: 0; left: 50%; transform: translateX(-50%); }
+  #fb { background: var(--btn-b); right: 0;  top: 50%;  transform: translateY(-50%); }
+  #fx { background: var(--btn-x); left: 0;   top: 50%;  transform: translateY(-50%); }
+  #fy { background: var(--btn-y); top: 0;    left: 50%; transform: translateX(-50%); }
+
+  /* ── Sticks ────────────────────────────────────────────────────────────── */
+  .stick-row { display: flex; justify-content: space-around; padding: 0 8px; }
+  .stick-zone {
+    width: clamp(60px, 16vw, 80px); height: clamp(60px, 16vw, 80px);
+    background: #0d0d0d;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.12);
+    box-shadow: inset 0 0 0 4px rgba(0,0,0,.35), inset 0 0 0 8px rgba(255,255,255,.04);
+    position: relative; cursor: pointer; touch-action: none;
+  }
+  .stick-zone::after {
+    content: attr(data-stick-label);
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: clamp(8px, 2vw, 11px); font-weight: 800; color: rgba(255,255,255,0.28);
+    pointer-events: none;
+    font-family: 'SF Mono', 'Consolas', monospace;
+  }
+  .stick-zone.click-active::after { color: rgba(255,255,255,0.9); }
+  .stick-knob {
+    position: absolute;
+    width: clamp(28px, 7.5vw, 40px); height: clamp(28px, 7.5vw, 40px);
+    background: radial-gradient(circle at 40% 35%, #3a3a3a, #1a1a1a);
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.7);
+    border-radius: 50%; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); pointer-events: none;
+  }
+
+  #snack {
+    position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
+    background: rgba(10,15,10,0.95); color: #e2e8f0; font-size: 12px;
+    padding: 8px 16px; border-radius: 20px;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s; white-space: nowrap;
+    z-index: 150;
+  }
+  #snack.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <a href="/">← BACK</a>
+  <span class="title">NULLPAD · XBOX</span>
+  <div id="conn-dot"></div>
+</div>
+<div id="snack"></div>
+
+<div id="xbox-wrap">
+
+  <div class="trigger-row">
+    <div class="trig-stack">
+      <div class="trig-btn" data-btn="lt" data-feedback-label="LT"></div>
+      <div class="bump-btn" data-btn="lb" data-feedback-label="LB">LB</div>
+    </div>
+    <div class="trig-stack" style="align-items:flex-end">
+      <div class="trig-btn" data-btn="rt" data-feedback-label="RT"></div>
+      <div class="bump-btn" data-btn="rb" data-feedback-label="RB">RB</div>
+    </div>
+  </div>
+
+  <div class="main-row">
+    <div class="dpad">
+      <div></div>
+      <div class="dp" data-btn="dpadUp"    data-feedback-label="↑">▲</div>
+      <div></div>
+      <div class="dp" data-btn="dpadLeft"  data-feedback-label="←">◀</div>
+      <div class="dp center"></div>
+      <div class="dp" data-btn="dpadRight" data-feedback-label="→">▶</div>
+      <div></div>
+      <div class="dp" data-btn="dpadDown"  data-feedback-label="↓">▼</div>
+      <div></div>
+    </div>
+
+    <div class="center-col">
+      <div class="menu-row">
+        <div class="menu-btn sm"  data-btn="back"  data-feedback-label="BACK">⧉</div>
+        <div class="menu-btn sm"  data-btn="start" data-feedback-label="START">≡</div>
+      </div>
+      <div class="menu-btn guide" data-btn="guide" data-feedback-label="GUIDE">⊙</div>
+    </div>
+
+    <div class="face-cluster">
+      <div class="face-btn" id="fy" data-btn="y" data-feedback-label="Y">Y</div>
+      <div class="face-btn" id="fx" data-btn="x" data-feedback-label="X">X</div>
+      <div class="face-btn" id="fb" data-btn="b" data-feedback-label="B">B</div>
+      <div class="face-btn" id="fa" data-btn="a" data-feedback-label="A">A</div>
+    </div>
+  </div>
+
+  <div class="stick-row">
+    <div class="stick-zone" id="sl" data-stick-click="ls" data-stick-label="L3"><div class="stick-knob" id="kl"></div></div>
+    <div class="stick-zone" id="sr" data-stick-click="rs" data-stick-label="R3"><div class="stick-knob" id="kr"></div></div>
+  </div>
+
+</div>
+
+<script src="/ws.js"></script>
+<script src="/input.js"></script>
+<script src="/layout.js"></script>
+<script>
+const btnState = {
+  a: false, b: false, x: false, y: false,
+  lb: false, rb: false, lt: 0, rt: 0,
+  start: false, back: false, guide: false,
+  dpadUp: false, dpadDown: false, dpadLeft: false, dpadRight: false,
+  lx: 0, ly: 0, rx: 0, ry: 0, ls: false, rs: false,
+};
+let sendScheduled = false;
+
+NullWS.init(
+  (m) => showSnack(`Slot ${m.slot} · ${m.profile === 'xbox' ? 'Xbox' : m.profile}`),
+  (p) => { if (navigator.vibrate) navigator.vibrate(p); },
+  (s) => { document.getElementById('conn-dot').className = s === 'connected' ? 'ok' : ''; },
+  'xbox'
+);
+
+NullInput.bindButtons(btnState, scheduleSend, { analogKeys: ['lt', 'rt'] });
+
+function setupStick(zoneId, knobId, xKey, yKey, clickKey) {
+  NullInput.bindStick(
+    document.getElementById(zoneId),
+    document.getElementById(knobId),
+    btnState, xKey, yKey, scheduleSend, { clickKey }
+  );
+}
+setupStick('sl','kl','lx','ly','ls');
+setupStick('sr','kr','rx','ry','rs');
+
+function scheduleSend() {
+  if (sendScheduled) return;
+  sendScheduled = true;
+  requestAnimationFrame(() => { sendScheduled = false; NullWS.send({ type:'input', state:{...btnState} }); });
+}
+
+let snackTimer;
+function showSnack(msg) {
+  const el = document.getElementById('snack');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(snackTimer); snackTimer = setTimeout(()=>el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
