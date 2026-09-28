@@ -6,12 +6,13 @@
  * v2 additions:
  *  - Haptic feedback on every press (navigator.vibrate)
  *  - Button display overlay API (NullInput.setFeedbackTarget)
+ *  - Audio feedback (AudioContext click on press)
+ *  - Rapid fire / turbo (data-turbo="<hz>" on any [data-btn] element)
  */
 'use strict';
 
 const NullInput = (() => {
-  // ── Feedback target ─────────────────────────────────────────────────────────
-  // Any element set here will receive the label of the last pressed button.
+  // ── Feedback target ───────────────────────────────────────────────────────
   let _feedbackEl = null;
   let _feedbackTimer = null;
 
@@ -29,18 +30,45 @@ const NullInput = (() => {
     }, 600);
   }
 
-  // ── Haptics ─────────────────────────────────────────────────────────────────
-  // Short 12ms pulse — enough to feel, not enough to be annoying.
+  // ── Haptics ───────────────────────────────────────────────────────────────
   function _vibrate() {
     try { if (navigator.vibrate) navigator.vibrate(12); } catch (_) {}
   }
 
-  // ── Button helpers ───────────────────────────────────────────────────────────
+  // ── Audio feedback ────────────────────────────────────────────────────────
+  // Lazy-init AudioContext on first press (browser autoplay policy).
+  let _audioCtx = null;
+  let _audioEnabled = true;
+
+  function _playClick() {
+    if (!_audioEnabled) return;
+    try {
+      if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (_audioCtx.state === 'suspended') _audioCtx.resume();
+      const osc = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(_audioCtx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, _audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.12, _audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, _audioCtx.currentTime + 0.055);
+      osc.start(_audioCtx.currentTime);
+      osc.stop(_audioCtx.currentTime + 0.055);
+    } catch (_) {}
+  }
+
+  function setAudioEnabled(enabled) {
+    _audioEnabled = !!enabled;
+  }
+
+  // ── Button helpers ────────────────────────────────────────────────────────
   function setPressed(el, state, key, value, onChange) {
     state[key] = value;
     el.classList.add('pressed');
     onChange();
     _vibrate();
+    _playClick();
     _showFeedback(el.dataset.feedbackLabel || el.dataset.btn || el.textContent?.trim() || key);
   }
 
@@ -50,7 +78,32 @@ const NullInput = (() => {
     onChange();
   }
 
-  // ── bindButtons ──────────────────────────────────────────────────────────────
+  // ── Rapid fire / turbo ────────────────────────────────────────────────────
+  // Add data-turbo="<hz>" to any [data-btn] element to enable turbo mode.
+  // While held, the button fires at that frequency (clamped 1–30 Hz).
+  // The turbo interval is created on press and cleared on release.
+  const _turboTimers = new Map();
+
+  function _startTurbo(el, state, key, analogKeys, onChange, hz) {
+    _stopTurbo(key);
+    const intervalMs = Math.round(1000 / Math.max(1, Math.min(30, hz)));
+    const isAnalog = analogKeys.has(key);
+    const timer = setInterval(() => {
+      // Toggle pressed state to simulate button pulses
+      const next = !state[key];
+      state[key] = isAnalog ? (next ? 1 : 0) : next;
+      el.classList.toggle('pressed', !!state[key]);
+      onChange();
+    }, intervalMs);
+    _turboTimers.set(key, timer);
+  }
+
+  function _stopTurbo(key) {
+    const t = _turboTimers.get(key);
+    if (t != null) { clearInterval(t); _turboTimers.delete(key); }
+  }
+
+  // ── bindButtons ──────────────────────────────────────────────────────────
   function bindButtons(state, onChange, options = {}) {
     const selector = options.selector || '[data-btn]';
     const analogKeys = new Set(options.analogKeys || []);
@@ -59,6 +112,7 @@ const NullInput = (() => {
       const key = el.dataset.btn;
       if (!key) return;
 
+      const turboHz = el.dataset.turbo ? parseFloat(el.dataset.turbo) : 0;
       let activePointerId = null;
 
       const press = (event) => {
@@ -67,11 +121,13 @@ const NullInput = (() => {
         activePointerId = event.pointerId;
         try { el.setPointerCapture(event.pointerId); } catch (_) {}
         setPressed(el, state, key, analogKeys.has(key) ? 1 : true, onChange);
+        if (turboHz > 0) _startTurbo(el, state, key, analogKeys, onChange, turboHz);
       };
 
       const release = (event) => {
         if (activePointerId !== null && event.pointerId !== activePointerId) return;
         activePointerId = null;
+        if (turboHz > 0) _stopTurbo(key);
         setReleased(el, state, key, analogKeys.has(key) ? 0 : false, onChange);
       };
 
@@ -83,7 +139,7 @@ const NullInput = (() => {
     });
   }
 
-  // ── bindStick ────────────────────────────────────────────────────────────────
+  // ── bindStick ─────────────────────────────────────────────────────────────
   function bindStick(zone, knob, state, xKey, yKey, onChange, options = {}) {
     if (!zone || !knob) return;
 
@@ -102,6 +158,7 @@ const NullInput = (() => {
       zone.classList.toggle('click-active', !!value);
       if (value) {
         _vibrate();
+        _playClick();
         _showFeedback(clickKey.toUpperCase());
       }
       onChange();
@@ -179,5 +236,5 @@ const NullInput = (() => {
     zone.addEventListener('contextmenu', (event) => event.preventDefault());
   }
 
-  return { bindButtons, bindStick, setFeedbackTarget };
+  return { bindButtons, bindStick, setFeedbackTarget, setAudioEnabled };
 })();

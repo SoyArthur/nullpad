@@ -222,6 +222,37 @@
     white-space: nowrap; z-index: 150;
   }
   #snack.show { opacity: 1; }
+  /* -- Real touchpad zone --------------------------------------------------- */
+  #np-trackpad-zone {
+    width: 100%;
+    max-width: min(96vw, 460px);
+    height: clamp(54px, 12dvh, 90px);
+    background: rgba(255,255,255,.03);
+    border: 1px dashed rgba(255,255,255,.10);
+    border-radius: 10px;
+    margin: 4px auto 0;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,.18);
+    font-size: 11px;
+    font-family: 'SF Mono','Consolas',monospace;
+    letter-spacing: .06em;
+    touch-action: none;
+    cursor: pointer;
+    position: relative;
+    user-select: none; -webkit-user-select: none;
+  }
+  #np-trackpad-zone.active { background: rgba(124,58,237,.08); border-color: rgba(124,58,237,.3); }
+  #np-trackpad-cursor {
+    position: absolute;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: rgba(192,132,252,.7);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  #np-trackpad-zone.active #np-trackpad-cursor { opacity: 1; }
 </style>
 </head>
 <body>
@@ -294,11 +325,18 @@
     </div>
   </div>
 
+
+<div id="np-trackpad-zone">
+  <span>TRACKPAD</span>
+  <div id="np-trackpad-cursor"></div>
+</div>
 </div>
 
 <script src="/ws.js"></script>
 <script src="/input.js"></script>
 <script src="/layout.js"></script>
+    <script src="/presets.js"></script>
+    <script src="/sensors.js"></script>
 <script>
 const btnState = {
   cross: false, circle: false, square: false, triangle: false,

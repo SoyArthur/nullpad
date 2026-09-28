@@ -1,7 +1,7 @@
 {
   "name": "nullpad",
   "version": "1.0.0",
-  "description": "Mobile phone as virtual gamepad \u2014 Wiimote / DualSense / Xbox / Joy-Con",
+  "description": "Mobile phone as virtual gamepad — Wiimote / DualSense / Xbox / Joy-Con",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
@@ -12,9 +12,10 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "ws": "^8.17.0",
+    "@jitsi/robotjs": "^0.6.24",
     "qrcode-terminal": "^0.12.0",
-    "vigemclient": "1.5.3"
+    "vigemclient": "1.5.3",
+    "ws": "^8.17.0"
   },
   "keywords": [
     "gamepad",

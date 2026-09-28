@@ -12,6 +12,7 @@ const cfg    = require('../config');
 const ws     = require('./websocket');
 const vigem  = require('./vigem');
 const dsu    = require('./dsu');
+const mouse  = require('./mouse');
 
 // ── MIME map ──────────────────────────────────────────────────────────────────
 const MIME = {
@@ -78,6 +79,9 @@ function start() {
     process.exit(1);
   }
 
+  // Init mouse bridge — optional, fails gracefully if robotjs unavailable.
+  mouse.init();
+
   // Create HTTPS server
   const server = https.createServer(sslOptions, serveStatic);
 
@@ -99,8 +103,10 @@ function start() {
     console.log('╠══════════════════════════════════════════╣');
     const header = `║  PC:     ${url}`.padEnd(43) + '║';
     const vigemStatus = vigem.isAvailable() ? 'Active ✅' : 'Unavailable ❌';
+    const mouseStatus = mouse.isAvailable() ? 'Active ✅' : 'Unavailable ⚠️';
     console.log(header);
     console.log(`║  ViGEm:  ${vigemStatus}`.padEnd(43) + '║');
+    console.log(`║  Mouse:  ${mouseStatus}`.padEnd(43) + '║');
     console.log('╚══════════════════════════════════════════╝');
     if (cfg.HOST === '127.0.0.1') {
       console.warn('\n⚠️  No private LAN IPv4 was detected. Phone access will not work until the PC is connected to a LAN/Wi-Fi.');
@@ -127,7 +133,6 @@ function start() {
 }
 
 // ── Inline QR (ASCII) ─────────────────────────────────────────────────────────
-// Uses qrcode-terminal if available, falls back to URL text
 function printQR(url) {
   try {
     const qr = require('qrcode-terminal');

@@ -12,6 +12,7 @@ const cfg       = require('../config');
 const vigem     = require('./vigem');
 const haptics   = require('./haptics');
 const profiles  = require('../profiles');
+const mouse     = require('./mouse');
 
 let wss = null;
 let heartbeatTimer = null;
@@ -23,8 +24,6 @@ function init(httpsServer) {
   console.log('[WS] WebSocket server attached to HTTPS');
 
   wss.on('connection', (ws, req) => {
-    // NULLPAD is a one-controller appliance. Replace any old browser tab,
-    // bfcache page, refresh, or stale socket before creating another target.
     const id = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
     ws._nullpadId = id;
     ws._profile = null;
@@ -32,8 +31,6 @@ function init(httpsServer) {
     ws._cleaned = false;
     ws.isAlive = true;
 
-    // The new socket is already present in wss.clients when this callback runs.
-    // Exclude it from replacement or it would close itself immediately.
     replaceExistingSessions(ws);
 
     console.log(`[WS] Client connected: ${id}`);
@@ -89,6 +86,27 @@ function init(httpsServer) {
           } catch (e) {
             console.error(`[WS] Input error for ${id}:`, e.message || e);
           }
+          break;
+        }
+
+        // ── Gyro mouse: phone gyro → PC cursor movement ───────────────────
+        case 'gyro-mouse': {
+          if (typeof msg.dx === 'number' && typeof msg.dy === 'number') {
+            mouse.gyroMouse(msg.dx, msg.dy);
+          }
+          break;
+        }
+
+        // ── Trackpad: touchpad swipe → PC cursor movement ─────────────────
+        case 'trackpad-delta': {
+          if (typeof msg.dx === 'number' && typeof msg.dy === 'number') {
+            mouse.trackpadDelta(msg.dx, msg.dy);
+          }
+          break;
+        }
+
+        case 'trackpad-click': {
+          mouse.trackpadClick(msg.button || 'left');
           break;
         }
 

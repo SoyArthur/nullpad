@@ -3,7 +3,7 @@
  *
  * Motion channels:
  *   - DeviceMotion acceleration -> DSU accelerometer
- *   - DeviceMotion rotationRate -> DSU gyroscope
+ *   - DeviceMotion rotationRate -> DSU gyroscope + optional gyro-mouse
  *   - DeviceOrientation tilt -> optional right-stick pointer proxy
  *   - shake -> configurable XInput action
  *
@@ -21,6 +21,8 @@ const NullSensors = (() => {
     tiltSensitivity: 1,
     shakeEnabled: true,
     shakeAction: 'lb',
+    gyroMouseEnabled: false,
+    gyroMouseSensitivity: 1.0,
   });
   const IR_BETA_RANGE = [-45, 45];
   const IR_GAMMA_RANGE = [-45, 45];
@@ -45,6 +47,8 @@ const NullSensors = (() => {
   let calibrationActive = false;
   let calibrationTimer = null;
   let _onChange = () => {};
+  // WS send function — injected via setWsSend so sensors.js can push gyro-mouse
+  let _wsSend = null;
 
   const motion = {
     accelX: 0,
@@ -82,6 +86,8 @@ const NullSensors = (() => {
     next.tiltSensitivity = clamp(Number(next.tiltSensitivity) || 1, 0.35, 2.5);
     next.shakeEnabled = next.shakeEnabled !== false;
     next.shakeAction = SHAKE_ACTIONS.has(next.shakeAction) ? next.shakeAction : DEFAULTS.shakeAction;
+    next.gyroMouseEnabled = !!next.gyroMouseEnabled;
+    next.gyroMouseSensitivity = clamp(Number(next.gyroMouseSensitivity) || 1.0, 0.2, 5.0);
     return next;
   }
 
@@ -126,8 +132,9 @@ const NullSensors = (() => {
     listenersAttached = true;
   }
 
-  async function init(onChange) {
+  async function init(onChange, wsSend) {
     if (typeof onChange === 'function') _onChange = onChange;
+    if (typeof wsSend === 'function') _wsSend = wsSend;
     installMotionUI();
     if (initialized) return motionGranted || orientationGranted;
 
@@ -144,6 +151,11 @@ const NullSensors = (() => {
     return true;
   }
 
+  // Allow late injection of the WS send function (called after WS init)
+  function setWsSend(fn) {
+    if (typeof fn === 'function') _wsSend = fn;
+  }
+
   function getState() {
     return {
       irX,
@@ -157,26 +169,17 @@ const NullSensors = (() => {
   }
 
   function clearShake() { shakeDetected = false; }
-
   function getConfig() { return { ...config }; }
 
   function setConfig(next) {
     config = sanitizeConfig(next);
     if (!config.motionEnabled) {
-      motion.accelX = 0;
-      motion.accelY = 0;
-      motion.accelZ = 0;
-      motion.gyroPitch = 0;
-      motion.gyroYaw = 0;
-      motion.gyroRoll = 0;
-      motion.accelAvailable = false;
-      motion.gyroAvailable = false;
+      motion.accelX = 0; motion.accelY = 0; motion.accelZ = 0;
+      motion.gyroPitch = 0; motion.gyroYaw = 0; motion.gyroRoll = 0;
+      motion.accelAvailable = false; motion.gyroAvailable = false;
       shakeDetected = false;
     }
-    if (!config.tiltPointerEnabled) {
-      irX = 0;
-      irY = 0;
-    }
+    if (!config.tiltPointerEnabled) { irX = 0; irY = 0; }
     saveConfig();
     updateMotionStatus();
     _onChange();
@@ -227,13 +230,7 @@ const NullSensors = (() => {
   }
 
   function onOrientation(event) {
-    if (!config.tiltPointerEnabled) {
-      irX = 0;
-      irY = 0;
-      _onChange();
-      return;
-    }
-
+    if (!config.tiltPointerEnabled) { irX = 0; irY = 0; _onChange(); return; }
     if (Number.isFinite(event.gamma)) {
       const rawX = mapRange(event.gamma * config.tiltSensitivity, IR_GAMMA_RANGE[0], IR_GAMMA_RANGE[1], -1, 1);
       irX = lerp(irX, applyDeadzone(rawX), SMOOTHING);
@@ -243,6 +240,21 @@ const NullSensors = (() => {
       irY = lerp(irY, applyDeadzone(rawY), SMOOTHING);
     }
     _onChange();
+  }
+
+  // ── Gyro mouse delta accumulator ──────────────────────────────────────────
+  // We accumulate gyro deltas and flush them via rAF to avoid WS spam.
+  let _gyroMouseAccX = 0;
+  let _gyroMouseAccY = 0;
+  let _gyroMouseRaf = null;
+
+  function _flushGyroMouse() {
+    _gyroMouseRaf = null;
+    if (!_wsSend || !config.gyroMouseEnabled) return;
+    if (Math.abs(_gyroMouseAccX) < 0.01 && Math.abs(_gyroMouseAccY) < 0.01) return;
+    _wsSend({ type: 'gyro-mouse', dx: _gyroMouseAccX * config.gyroMouseSensitivity, dy: _gyroMouseAccY * config.gyroMouseSensitivity });
+    _gyroMouseAccX = 0;
+    _gyroMouseAccY = 0;
   }
 
   function onMotion(event) {
@@ -277,14 +289,21 @@ const NullSensors = (() => {
           gamma: finite(rotation.gamma),
         });
       }
+
+      // Gyro-mouse: accumulate and flush via rAF
+      if (config.gyroMouseEnabled && _wsSend) {
+        // Use yaw (alpha) for X, pitch (beta) for Y — typical FPS mapping
+        const dt = event.interval || 0.016;
+        _gyroMouseAccX += motion.gyroYaw * dt;
+        _gyroMouseAccY += motion.gyroPitch * dt;
+        if (!_gyroMouseRaf) _gyroMouseRaf = requestAnimationFrame(_flushGyroMouse);
+      }
     }
 
     const nowMs = typeof performance !== 'undefined' && Number.isFinite(performance.now())
-      ? performance.now()
-      : Date.now();
+      ? performance.now() : Date.now();
     const origin = typeof performance !== 'undefined' && Number.isFinite(performance.timeOrigin)
-      ? performance.timeOrigin
-      : Date.now() - nowMs;
+      ? performance.timeOrigin : Date.now() - nowMs;
     motion.timestampUs = Math.round((origin + nowMs) * 1000);
     _onChange();
   }
@@ -310,7 +329,7 @@ const NullSensors = (() => {
     showMotionSnack._timer = setTimeout(() => snack.classList.remove('show'), 1800);
   }
 
-  function toggleRow(label, id, enabled, onChange) {
+  function toggleRow(label, id, enabled) {
     return `<label style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:7px;font-size:10px;color:#cbd5e1">
       <span>${label}</span><button id="${id}" type="button" aria-pressed="${enabled}" style="min-width:70px;height:28px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:${enabled ? 'rgba(34,197,94,.20)' : 'rgba(255,255,255,.06)'};color:#fff;font:inherit;">${enabled ? 'ON' : 'OFF'}</button>
     </label>`;
@@ -345,8 +364,12 @@ const NullSensors = (() => {
       <div id="nullpad-motion-status" style="font-size:10px;color:#94a3b8;margin-top:4px">Esperando sensores…</div>
       ${toggleRow('Gyro + acelerómetro → DSU', 'nullpad-motion-enabled', config.motionEnabled)}
       ${toggleRow('Tilt → Right Stick', 'nullpad-tilt-enabled', config.tiltPointerEnabled)}
+      ${toggleRow('Gyro → Mouse PC', 'nullpad-gyromouse-enabled', config.gyroMouseEnabled)}
       <label style="display:block;font-size:10px;color:#cbd5e1;margin-top:8px">Sensibilidad tilt
         <input id="nullpad-tilt-sensitivity" type="range" min="0.35" max="2.50" step="0.05" value="${config.tiltSensitivity}" style="width:100%;margin-top:4px;">
+      </label>
+      <label style="display:block;font-size:10px;color:#cbd5e1;margin-top:6px">Sensibilidad gyro-mouse
+        <input id="nullpad-gyromouse-sensitivity" type="range" min="0.2" max="5.0" step="0.1" value="${config.gyroMouseSensitivity}" style="width:100%;margin-top:4px;">
       </label>
       <label style="display:block;font-size:10px;color:#cbd5e1;margin-top:8px">Shake →
         <select id="nullpad-shake-action" style="float:right;background:#111827;color:#fff;border:1px solid rgba(255,255,255,.1);border-radius:7px;height:26px;">
@@ -376,7 +399,7 @@ const NullSensors = (() => {
 
     button.addEventListener('click', async () => {
       panel.hidden = !panel.hidden;
-      if (!initialized) await init(_onChange);
+      if (!initialized) await init(_onChange, _wsSend);
       updateMotionStatus();
     });
 
@@ -384,27 +407,29 @@ const NullSensors = (() => {
       setConfig({ ...config, motionEnabled: !config.motionEnabled });
       setToggleText('nullpad-motion-enabled', config.motionEnabled);
     });
-
     panel.querySelector('#nullpad-tilt-enabled').addEventListener('click', () => {
       setConfig({ ...config, tiltPointerEnabled: !config.tiltPointerEnabled });
       if (!config.tiltPointerEnabled) { irX = 0; irY = 0; }
       setToggleText('nullpad-tilt-enabled', config.tiltPointerEnabled);
     });
-
+    panel.querySelector('#nullpad-gyromouse-enabled').addEventListener('click', () => {
+      setConfig({ ...config, gyroMouseEnabled: !config.gyroMouseEnabled });
+      setToggleText('nullpad-gyromouse-enabled', config.gyroMouseEnabled);
+    });
     panel.querySelector('#nullpad-tilt-sensitivity').addEventListener('input', (event) => {
       setConfig({ ...config, tiltSensitivity: Number(event.target.value) });
     });
-
+    panel.querySelector('#nullpad-gyromouse-sensitivity').addEventListener('input', (event) => {
+      setConfig({ ...config, gyroMouseSensitivity: Number(event.target.value) });
+    });
     panel.querySelector('#nullpad-shake-action').addEventListener('change', (event) => {
       setConfig({ ...config, shakeAction: event.target.value });
     });
-
     panel.querySelector('#nullpad-motion-calibrate').addEventListener('click', async () => {
-      if (!initialized) await init(_onChange);
+      if (!initialized) await init(_onChange, _wsSend);
       await calibrateGyro();
       updateMotionStatus();
     });
-
     panel.querySelector('#nullpad-motion-rumble').addEventListener('click', testRumble);
     panel._nullpadUpdate = updateMotionStatus;
     updateMotionStatus();
@@ -417,7 +442,8 @@ const NullSensors = (() => {
     const gyro = motion.gyroAvailable ? 'Gyro ✓' : 'Gyro —';
     const accel = motion.accelAvailable ? 'Accel ✓' : 'Accel —';
     const vibration = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function' ? 'Vib ✓' : 'Vib —';
-    status.textContent = `${gyro} · ${accel} · ${vibration} · DSU ${initialized ? 'activo' : 'apagado'}`;
+    const gMouse = config.gyroMouseEnabled ? 'GyrMouse ON' : '';
+    status.textContent = [gyro, accel, vibration, gMouse].filter(Boolean).join(' · ');
   }
 
   if (typeof document !== 'undefined') {
@@ -427,6 +453,7 @@ const NullSensors = (() => {
 
   return {
     init,
+    setWsSend,
     getState,
     getConfig,
     setConfig,
